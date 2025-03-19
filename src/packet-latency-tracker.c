@@ -68,6 +68,26 @@ int BPF_KPROBE(udp_v4_receiver, struct sock *sk, struct sk_buff *skb) {
     return 0;
 }
 
+SEC("kprobe/icmp_reply")
+int BPF_KPROBE(icmp_v4_echo_receiver, struct icmp_bxm *icmp_param, struct sk_buff *skb) {
+    __u64 cur_time = bpf_ktime_get_ns();
+    struct rcv_entry *rcv = bpf_map_lookup_elem(&rcv_map, &skb);
+    if (!rcv) return 0;
+    if (rcv->prot_type != ICMP) return 0;
+    __u64 diff_time = cur_time - rcv->time;
+    if (diff_time > ONE_SECOND) return 0;
+    struct iphdr *iph = (struct iphdr*)rcv->hdr;
+    struct icmphdr *icmph = (struct icmphdr*)(rcv->hdr + sizeof(struct iphdr));
+    if (icmph->type != ICMP_ECHO) return 0;
+    struct log_entry entry = {
+        .time = diff_time,
+        .sip = iph->saddr,
+        .prot_type = ICMP
+    };
+    bpf_ringbuf_output(&log_map, &entry, sizeof(entry), 0);
+    return 0;
+}
+
 SEC("kprobe/ip_rcv_core")
 int BPF_KPROBE(skb_marker, struct sk_buff *skb, struct net *net) {
     __u64 cur_time = bpf_ktime_get_ns();
@@ -100,6 +120,13 @@ int BPF_KPROBE(skb_marker, struct sk_buff *skb, struct net *net) {
     else if (iph.protocol == IPPROTO_UDP) {
         rcv.prot_type = UDP;
         if (bpf_probe_read_kernel(rcv.hdr, sizeof(struct iphdr) + sizeof(struct udphdr), data) < 0) {
+            return 0;
+        }
+        bpf_map_update_elem(&rcv_map, &skb, &rcv, BPF_ANY);
+    }
+    else if (iph.protocol == IPPROTO_ICMP) {
+        rcv.prot_type = ICMP;
+        if (bpf_probe_read_kernel(rcv.hdr, sizeof(struct iphdr) + sizeof(struct icmphdr), data) < 0) {
             return 0;
         }
         bpf_map_update_elem(&rcv_map, &skb, &rcv, BPF_ANY);

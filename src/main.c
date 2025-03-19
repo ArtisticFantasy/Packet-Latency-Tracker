@@ -9,7 +9,7 @@
 #include <arpa/inet.h>
 #include "common.h"
 
-FILE *fp_tcp, *fp_udp;
+FILE *fp_tcp, *fp_udp, *fp_icmp;
 
 int handle_event(void *ctx, void *data, size_t data_sz) {
     struct log_entry *entry = data;
@@ -26,6 +26,10 @@ int handle_event(void *ctx, void *data, size_t data_sz) {
     } else if (entry->prot_type == UDP) {
         fprintf(fp_udp, "%s \t%-5u \t%-5u \t%llu\n", sip_str, entry->sport, entry->dport, entry->time);
         fflush(fp_udp);
+    }
+    else if (entry->prot_type == ICMP) {
+        fprintf(fp_icmp, "%s \t%llu\n", sip_str, entry->time);
+        fflush(fp_icmp);
     }
     return 0;
 }
@@ -44,7 +48,7 @@ void cleanup() {
 
 int main(int argc, char **argv) {
     struct bpf_object *obj;
-    struct bpf_program *mark_prog, *tcp_prog, *udp_prog;
+    struct bpf_program *mark_prog, *tcp_prog, *udp_prog, *icmp_prog;
     struct bpf_link *link;
     int ret;
 
@@ -77,6 +81,13 @@ int main(int argc, char **argv) {
     udp_prog = bpf_object__find_program_by_name(obj, "udp_v4_receiver");
     if (!udp_prog) {
         fprintf(stderr, "ERROR: finding udp_v4_receiver in BPF object file failed\n");
+        bpf_object__close(obj);
+        return 1;
+    }
+
+    icmp_prog = bpf_object__find_program_by_name(obj, "icmp_v4_echo_receiver");
+    if (!icmp_prog) {
+        fprintf(stderr, "ERROR: finding icmp_v4_echo_receiver in BPF object file failed\n");
         bpf_object__close(obj);
         return 1;
     }
@@ -116,6 +127,13 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    link = bpf_program__attach_kprobe(icmp_prog, false, "icmp_reply");
+    if (!link) {
+        fprintf(stderr, "ERROR: attaching icmp_v4_echo_receiver to kprobe failed\n");
+        bpf_object__close(obj);
+        return 1;
+    }
+
     if (atexit(cleanup) != 0) {
         fprintf(stderr, "ERROR: registering cleanup function failed\n");
         bpf_object__close(obj);
@@ -136,6 +154,13 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    fp_icmp = fopen("icmp_packets.log", "w");
+    if (!fp_icmp) {
+        fprintf(stderr, "ERROR: opening icmp_packets.log failed\n");
+        bpf_object__close(obj);
+        return 1;
+    }
+
     struct ring_buffer *rb = ring_buffer__new(log_map_fd, handle_event, NULL, NULL);
     if (!rb) {
         fprintf(stderr, "ERROR: creating ring buffer failed\n");
@@ -150,6 +175,9 @@ int main(int argc, char **argv) {
 
     fprintf(fp_udp, "sip         \tsport \tdport \tlatency\n");
     fflush(fp_udp);
+
+    fprintf(fp_icmp, "sip         \tlatency\n");
+    fflush(fp_icmp);
 
     while (1) {
         int ret = ring_buffer__poll(rb, -1);

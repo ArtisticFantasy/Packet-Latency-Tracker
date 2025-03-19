@@ -5,6 +5,8 @@ A useful tool to track data packet's processing latency in the Linux kernel via 
 
 - For UDP packets, the program will track the processing latency from *ip_rcv_core*
 to *__udp_enqueue_schedule_skb*.
+
+- For ICMP Echo packets, the program will track the processing latency from *ip_rcv_core* to *icmp_reply*.
 # Usage
 1) Build the project
 ```
@@ -32,4 +34,11 @@ sip  sport  dport  latency
 ...   ...    ...     ...
 ...   ...    ...     ...
 ...   ...    ...     ...
+```
+- For ICMP Echo,
+```
+sip  latency
+...    ...
+...    ...
+...    ...
 ```

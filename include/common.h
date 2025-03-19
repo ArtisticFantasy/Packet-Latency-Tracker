@@ -81,14 +81,9 @@ enum proto_type {
 struct log_entry {
     __u64 time;
     __u32 sip;
-    union {
-        struct {
-            __u32 seq, ack;
-            __u16 sport, dport;
-        };
-        struct {
-            __u8 type, code;
-        };
+    struct {
+        __u32 seq, ack;
+        __u16 sport, dport;
     };
     __u8 prot_type;
 };
