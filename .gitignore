@@ -1,0 +1,4 @@
+*.log
+src/main
+src/packet-latency-tracker.o
+include/vmlinux.h
