@@ -18,7 +18,7 @@ make run
 ```
 3) Get the results
 
-The TCP results will be saved to **tcp_packets.log**, and the UDP results will be saved to **udp_packets.log**.
+The TCP results will be saved to **tcp_packets.log**, the UDP results will be saved to **udp_packets.log**, and the ICMP Echo results will be saved to **icmp_packets.log**.
 
 The format is as follows:
 - For TCP,
